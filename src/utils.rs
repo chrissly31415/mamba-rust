@@ -10,6 +10,7 @@ use mamba::{Molecule,create_dataframe,mol_from_xyz};
 
 pub type Float = f32;
 
+
 //https://rust-lang-nursery.github.io/rust-cookbook/science/mathematics/linear_algebra.html
 
 ///Distance of 2 vectors

@@ -4,6 +4,9 @@
 //! using machine learned models.
 //! Using ndarray (mathematical arrays) and polars (dataframe)
 //! 
+//! Generation of training data:
+//! 
+//! babel -m -h --gend3D -isdf ..\..\opera_data\OPERA_BP\TST_BP_1358.sdf -oxyz test.xyz
 
 mod mamba;
 mod utils;
