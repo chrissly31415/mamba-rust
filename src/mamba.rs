@@ -155,8 +155,9 @@ pub fn create_dataframe(mol: Molecule) ->Result<(),Box<dyn Error>> {
                     data_row.push(dist);
                     data_row.push(distb);
                     if features.len()==0 { 
-                        //let mut a: &str = format!("at{:}",k).as_str();
-                        header.append(&mut vec!["at","dista","distb"]);
+                        let a: String = format!("at{:}",k);
+                        let b = a.to_owned().as_str();
+                        header.append(&mut vec![b,"dista","distb"]);
                     }
                     k +=1;
                 }
@@ -165,17 +166,19 @@ pub fn create_dataframe(mol: Molecule) ->Result<(),Box<dyn Error>> {
             println!();
         }
     }
-    //create dataframe
+    //transpose data first...
     let features_col = transpose(features);
 
     println!("{:?}",features_col);
     //println!("{:?}",&header);
-
-    //let s0 = Series::init("days", [0, 1, 2].as_ref());
-    //let s1 = Series::init("temp", [22.1, 19.9, 7.].as_ref());
-    let s0 = Series::new("id1", features_col[0].to_owned()); 
-    let s1 = Series::new("id2", features_col[1].to_owned());
-    let df = DataFrame::new(vec![s0, s1]).unwrap();
+    let mut series = Vec::<Series>::new();
+    assert_eq!(features_col.len(),header.len());
+    let zip_iter = features_col.iter().zip(header.iter());
+    for (col,name) in zip_iter {
+        let  s = Series::new(name, col.to_owned()); 
+        series.push(s);
+    }
+    let df = DataFrame::new(series).unwrap();
 
     println!("{:?}",df);
     Ok(())
