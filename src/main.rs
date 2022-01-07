@@ -12,7 +12,6 @@ mod mamba;
 mod utils;
 
 use std::env;
-
 use mamba::{create_dataframe,mol_from_xyz};
 
 fn main() {
@@ -21,6 +20,7 @@ fn main() {
     println!("{:?}", args);
     if args.len()>1 {
         let mol = mol_from_xyz(&args[1]).expect("Could not open file!");
-        create_dataframe(mol);
+        create_dataframe(mol).unwrap();
     }
+
 }

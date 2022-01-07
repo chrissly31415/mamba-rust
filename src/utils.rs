@@ -1,14 +1,7 @@
-
-use std::fs;
+use crate::mamba::{Float};
 
 use ndarray::{Axis,Array,Array2,arr1,arr2,ArrayView1,indices_of};
 use ndarray::{s,array};
-
-use crate::mamba;
-use mamba::{Molecule,create_dataframe,mol_from_xyz};
-
-
-pub type Float = f32;
 
 
 //https://rust-lang-nursery.github.io/rust-cookbook/science/mathematics/linear_algebra.html
@@ -51,6 +44,21 @@ fn isclose(a: Float, b: Float, epsilon: Float) -> bool {
     (a - b).abs() <= a.abs().max(b.abs()) * epsilon
 }
 
+/// Transpode 2d vec: https://stackoverflow.com/questions/64498617/how-to-transpose-a-vector-of-vectors-in-rust
+pub fn transpose<T>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
+    assert!(!v.is_empty());
+    let len = v[0].len();
+    let mut iters: Vec<_> = v.into_iter().map(|n| n.into_iter()).collect();
+    (0..len)
+        .map(|_| {
+            iters
+                .iter_mut()
+                .map(|n| n.next().unwrap())
+                .collect::<Vec<T>>()
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -59,7 +67,10 @@ mod tests {
         use ndarray_rand::RandomExt;
         use ndarray_rand::rand_distr::Uniform;
         let a = Array::random((20, 3), Uniform::new(0., 10.));
+        println!("{:?}",&a);
         distance_matrix(&a);
+        let s = &a.shape();
+        assert_eq!(s[0] as i32,20);
     }
     #[test]
     fn test_argsort() {
@@ -77,8 +88,4 @@ mod tests {
         let dist = l2_dist(&a, &b);
         assert!(isclose(dist,Float::sqrt(3.0),1e-15));
     }
-
-    
- 
-
 }
