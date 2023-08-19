@@ -1,16 +1,19 @@
-#![feature(str_split_whitespace_as_str)]
+//#![feature(str_split_whitespace_as_str)]
 
 use std::error::Error;
 use std::fs;
 use std::mem;
-use std::result::Result;
 use std::path::PathBuf;
+use std::result::Result;
 
-use ndarray::{arr1, arr2, indices_of, Array, Array2, ArrayView1, Axis};
+use ml::predict_mol;
+use ndarray::{ arr2, indices_of, Array, Array2};
 
 use polars::prelude::*;
 
-use crate::utils;
+pub mod ml;
+mod utils;
+
 use utils::{argsort, distance_matrix, transpose};
 
 /// float type can be change
@@ -21,15 +24,18 @@ const DIST_CUTOFF: Float = 3.0;
 const N_CUT: usize = 3;
 
 static ELEMENTS: &[&str] = &[
-    "X", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S",
-    "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge",
-    "As", "Se", "Br", "Kr", "Rb", "Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd",
-    "In", "Sn", "Sb", "Te", "I",
+    "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl",
+    "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As",
+    "Se", "Br", "Kr", "Rb", "Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In",
+    "Sn", "Sb", "Te", "I", "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb",
+    "Dy", "Ho", "Er", "Tm", "Yb", "Lu", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg", "Tl",
+    "Pb", "Bi", "Th", "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm", "Md", "No", "Lr",
+    "Rf", "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Cn", "Nh", "Fl", "Mc", "Lv", "Ts", "Og",
 ];
 
 /// Simple Molecule structure
 #[derive(Default)]
-pub struct Molecule {
+pub struct XYZMolecule {
     pub natoms: usize,
     pub atoms: Vec<String>,
     pub coords: Array2<Float>,
@@ -39,12 +45,12 @@ pub struct Molecule {
 }
 
 /// Implementation of Molecule structure
-impl Molecule {
+impl XYZMolecule {
     /// creating a molecule from its core features
     pub fn new(atoms: Vec<String>, coords: Array2<Float>, q: i32) -> Self {
         let natoms = atoms.len();
-        assert_eq!(atoms.len(), coords.len()/3);
-        Molecule {
+        assert_eq!(atoms.len(), coords.len() / 3);
+        XYZMolecule {
             natoms,
             atoms,
             coords,
@@ -54,29 +60,40 @@ impl Molecule {
     }
 }
 
-/// Read the contents of a file to a string
-pub fn mol_from_xyz(filename: &str) -> Result<Molecule, Box<dyn Error>> {
+pub fn mol_from_xyz_file(filename: &str) -> Result<XYZMolecule, Box<dyn Error>> {
     let contents = fs::read_to_string(filename)?;
-    let mol = parse_contents(&contents)?;
+    mol_from_xyz_string(&contents)
+}
+
+pub fn mol_from_xyz_string(contents: &str) -> Result<XYZMolecule, Box<dyn Error>> {
+    let mol = parse_xyz_contents(&contents)?;
     Ok(mol)
 }
 
+pub fn molblock_from_xyz_string(contents: &str) -> Result<String, Box<dyn Error>> {
+    let mol = parse_xyz_contents(&contents)?;
+    let df = predict_mol(&mol);
+    let molblock = create_molblock(mol, df)?;
+    Ok(molblock)
+}
+
+
+
 /// Returns all files in directory with extension
-pub fn scan_directory(path: &str, extension: &str) -> Vec<PathBuf>{
+pub fn scan_directory(path: &str, extension: &str) -> Vec<PathBuf> {
     let paths = fs::read_dir(path).unwrap();
     let mut path_vec = Vec::<PathBuf>::new();
     for path in paths {
         let p = path.unwrap().path();
         if p.extension().unwrap() == extension {
             path_vec.push(p);
-        }      
+        }
     }
     path_vec
-    
 }
 
 ///Parsing the contents of an xyz file
-fn parse_contents(contents: &str) -> Result<Molecule, Box<dyn Error>> {
+fn parse_xyz_contents(contents: &str) -> Result<XYZMolecule, Box<dyn Error>> {
     let lines = contents.split("\n");
     let mut atoms: Vec<String> = Vec::new();
     let mut coords: Vec<Float> = Vec::new();
@@ -105,14 +122,14 @@ fn parse_contents(contents: &str) -> Result<Molecule, Box<dyn Error>> {
     }
     assert_eq!(natoms as usize, nrows);
     let coords = Array2::from_shape_vec((nrows, 3), coords).unwrap();
-    let mut molecule = Molecule::new(atoms, coords, 0);
+    let mut molecule = XYZMolecule::new(atoms, coords, 0);
     molecule.info = info.to_owned();
     Ok(molecule)
 }
 
 /// Create a 2D ndarray with local bond information from distance matrix
 /// https://docs.rs/ndarray/latest/ndarray/doc/ndarray_for_numpy_users/index.html#similarities
-pub fn create_dataframe(mol: &Molecule) -> Result<DataFrame, Box<dyn Error>> {
+pub fn create_dataframe(mol: &XYZMolecule) -> Result<DataFrame, Box<dyn Error>> {
     let dm = distance_matrix(&mol.coords);
     assert_eq!(mol.natoms, dm.ncols());
     let mut header = Vec::<String>::new();
@@ -179,7 +196,7 @@ pub fn create_dataframe(mol: &Molecule) -> Result<DataFrame, Box<dyn Error>> {
                         .position(|&s| s == el_next)
                         .unwrap_or_default();
                     let distb = dm[[b, nextn]];
-        
+
                     data_row.push(an_next as Float);
                     data_row.push(dist);
                     data_row.push(distb);
@@ -196,7 +213,6 @@ pub fn create_dataframe(mol: &Molecule) -> Result<DataFrame, Box<dyn Error>> {
         }
     }
     let features_col = transpose(features);
-
     let mut series = Vec::<Series>::new();
     assert_eq!(features_col.len(), header.len());
     let zip_iter = features_col.iter().zip(header.iter());
@@ -208,16 +224,14 @@ pub fn create_dataframe(mol: &Molecule) -> Result<DataFrame, Box<dyn Error>> {
     Ok(df)
 }
 
-pub fn get_bonds(df: &DataFrame) -> u32{
+pub fn get_bonds(df: &DataFrame) -> u32 {
     let bonds = df.column("preds").unwrap();
     let mask = bonds.gt(0);
     let nbonds = mask.sum().unwrap();
     nbonds
 }
 
-
-pub fn create_molblock(mol: Molecule, df: DataFrame) -> Result<String, Box<dyn Error>>{
-
+pub fn create_molblock(mol: XYZMolecule, df: DataFrame) -> Result<String, Box<dyn Error>> {
     let bonds = df.column("preds")?;
     let mask = bonds.gt(0);
     let df = df.filter(&mask)?;
@@ -229,42 +243,60 @@ pub fn create_molblock(mol: Molecule, df: DataFrame) -> Result<String, Box<dyn E
 
     // comment block
     ins += "ML generated sdf\n\n";
-    ins +=  format!("{} {}  0  0  0  0  0  0  0  0  1 V2000\n", natoms, nbonds ).as_str();
-    
+    ins += format!("{} {}  0  0  0  0  0  0  0  0  1 V2000\n", natoms, nbonds).as_str();
+
     // atom block
-    for (at, xyz) in mol.atoms.iter().zip
-    (mol.coords.outer_iter()) {
-        ins+= format!("{:10.4}{:10.4}{:10.4} {:<2} 0  0  0  0  0\n",xyz[0], xyz[1], xyz[2], at).as_str();
+    for (at, xyz) in mol.atoms.iter().zip(mol.coords.outer_iter()) {
+        ins += format!(
+            "{:10.4}{:10.4}{:10.4} {:<2} 0  0  0  0  0\n",
+            xyz[0], xyz[1], xyz[2], at
+        )
+        .as_str();
     }
-    
+
     // bond block
     let (nrows, ncols) = df.shape();
-    
+
     for i in 0..nrows {
         let row = df.get(i).unwrap();
         let id1 = &row[0].to_string();
         let id2 = &row[1].to_string();
-        let bond  = &row[ncols-1].to_string();
-        ins+= format!("{:>3}{:>3}{:>3} 0  0  0  0  0\n",id1,id2,bond).as_str();
+        let bond = &row[ncols - 1].to_string();
+        ins += format!("{:>3}{:>3}{:>3} 0  0  0  0  0\n", id1, id2, bond).as_str();
     }
     Ok(ins)
-} 
-
+}
 
 #[cfg(test)]
 mod tests {
+    use crate::ml::predict_mol;
+
     use super::*;
     #[test]
     fn test_molecule() {
-        let atoms: Vec<String> = vec!["C".to_string(),"O".to_string()];
-        let coords: Array2<Float> = arr2(&[[0.0,0.0,0.0],[1.0,1.0,1.0]]);
+        let atoms: Vec<String> = vec!["C".to_string(), "O".to_string()];
+        let coords: Array2<Float> = arr2(&[[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]);
         let q: i32 = 0;
-        let mol = Molecule::new(atoms, coords, q);
-        assert_eq!(mol.atoms.len(),2);
+        let mol = XYZMolecule::new(atoms, coords, q);
+        assert_eq!(mol.atoms.len(), 2);
+    }
+    #[test]
+    fn parse_xyz_string() {
+        let mol_str = "2
+
+        C          0.00000        0.00000        0.00000
+        O          0.00000        0.00000        1.00000";
+        let mol = mol_from_xyz_string(mol_str).expect("Failed parsing!");
+        assert_eq!(mol.coords.len(), 6);
+        assert_eq!(mol.atoms.len(), 2);
+        let df = predict_mol(&mol);
+        println!("{}",df);
+        let molblock = create_molblock(mol,df).expect("Failed molblock!");
+        assert_eq!(molblock.len(), 176);
     }
     #[test]
     fn parse_xyz() {
-        let mol = mol_from_xyz("data/test1.xyz").expect("Could not open file!");
+        let mol = mol_from_xyz_file("data/test1.xyz").expect("Could not open file!");
         assert_eq!(mol.coords.len(), 69);
         assert_eq!(mol.atoms.len(), 23);
     }
@@ -276,7 +308,7 @@ mod tests {
             let ext = path.extension().unwrap().to_str().unwrap();
             if path.is_file() && ext == "xyz" {
                 let fname = path.to_str().unwrap();
-                let mol = mol_from_xyz(fname).expect("Could not read file!");
+                let mol = mol_from_xyz_file(fname).expect("Could not read file!");
                 distance_matrix(&mol.coords);
                 let df = create_dataframe(&mol);
                 assert!(df.is_ok());
@@ -285,31 +317,24 @@ mod tests {
     }
     #[test]
     fn test_df() {
-        let mol = mol_from_xyz("data/test1.xyz").expect("Could not open file!");
+        let mol = mol_from_xyz_file("data/test1.xyz").expect("Could not open file!");
         let df = create_dataframe(&mol).unwrap();
         println!("df.shape:{:?}", df.shape());
-        assert_eq!(df.shape().0,90);
-        assert_eq!(df.shape().1,24);
+        assert_eq!(df.shape().0, 90);
+        assert_eq!(df.shape().1, 24);
     }
     #[test]
     fn test_scandir() {
         let pvec = scan_directory("./data", "xyz");
-        assert_eq!(pvec.len(),6);
+        assert_eq!(pvec.len(), 6);
     }
     #[test]
     fn test_all() {
-        use crate::ml::predict_mol;
         let pvec = scan_directory("./data", "xyz");
-        for (i,p) in pvec.iter().enumerate() {
-            let mol = mol_from_xyz(p.to_str().unwrap()).expect("Could not open file!");
-            
-            let df = predict_mol(&mol);
-            let nbonds = get_bonds(&df);
-            println!("{} atoms: {} nbonds: {}",i,mol.natoms,nbonds);
-            let molblock = create_molblock(mol,df);
-            
+        for (i, p) in pvec.iter().enumerate() {
+            let contents = fs::read_to_string(p).expect("Could not open file!");
+            let molblock = molblock_from_xyz_string(&contents);
             assert!(molblock.is_ok());
         }
-
     }
 }

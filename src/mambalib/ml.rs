@@ -1,17 +1,22 @@
 extern crate xgboost;
+use std::fs;
+
 use xgboost::{parameters, Booster, DMatrix};
 
-use std::{env, fs};
 use polars::prelude::*;
 
-use crate::{mamba::{Molecule, create_dataframe}, utils::{df2vec, accuracy}};
+use crate::{
+    create_dataframe,
+    utils::{accuracy, df2vec},
+    XYZMolecule,
+};
 
-pub fn train_xgb() {
+pub fn train_xgb(trainpath: &str, testpath: &str) {
+    //this function needs libsvm data sets
     //let dtrain = DMatrix::load("../mamba/3dqsar_train.dat").unwrap();
-    
-    let dtrain = DMatrix::load("../mamba/libsvm_large.dat").unwrap();
+    let dtrain = DMatrix::load(trainpath).unwrap();
     println!("Train matrix: {}x{}", dtrain.num_rows(), dtrain.num_cols());
-    let dtest = DMatrix::load("../mamba/3dqsar_test.dat").unwrap();
+    let dtest = DMatrix::load(testpath).unwrap();
     println!("Test matrix: {}x{}", dtest.num_rows(), dtest.num_cols());
 
     // configure objectives, metrics, etc.
@@ -70,7 +75,6 @@ pub fn train_xgb() {
         acc * preds.len() as f32,
         preds.len()
     );
-
 }
 
 pub fn eval_xgb(evaldata: &str) {
@@ -93,7 +97,7 @@ pub fn eval_xgb(evaldata: &str) {
     );
 }
 
-pub fn predict_mol(mol: &Molecule) -> DataFrame {
+pub fn predict_mol(mol: &XYZMolecule) -> DataFrame {
     let df = create_dataframe(mol).unwrap();
 
     let model = "xgb.model";
@@ -104,10 +108,10 @@ pub fn predict_mol(mol: &Molecule) -> DataFrame {
 
     let (n, _) = df.shape();
     let dtest = DMatrix::from_dense(&flat_vec, n).unwrap();
-    let preds= Series::new("preds", booster.predict(&dtest).unwrap());
+    let preds = Series::new("preds", booster.predict(&dtest).unwrap());
 
     let df = df.hstack(&[preds]).unwrap();
-    
+
     let file = fs::File::create("df.csv").expect("could not create file");
     CsvWriter::new(&file)
         .has_header(true)

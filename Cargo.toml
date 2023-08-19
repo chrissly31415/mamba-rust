@@ -1,16 +1,22 @@
 [package]
-name = "mamba-rs"
+name = "mamba"
 version = "0.0.1"
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "mambalib"
+path = "src/mambalib/mambalib.rs"
+
+[[bin]]
+name = "mamba"
+path = "src/main.rs"
 
 [dependencies]
-clap = {version = "^3.0", features = ["derive","cargo"]}
+clap = { version ="4.3.19", features = ["color","help","usage","cargo"]}
 ndarray = {version = ">=0.15", features = ["blas"]}
-ndarray-linalg = {version = "^0.13", optional = true, default-features = false}
+ndarray-linalg = {version = "0.16.0", optional = true, default-features = false}
 ndarray-stats = "^0.5"
 ndarray-rand = "^0.14"
 rand = "^0.8"
-polars = {version = ">=0.18", features = ["rows","serde","csv-file","ndarray"]}
+polars = {version = ">=0.3", features = ["rows","serde","csv-file","ndarray"]}
 xgboost = "0.1.4"

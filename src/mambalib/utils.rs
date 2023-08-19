@@ -1,12 +1,9 @@
-use crate::mamba::Float;
+use ndarray::{indices_of, Array2, ArrayView1, s};
+use polars::prelude::{DataFrame,AnyValue};
 
-use ndarray::{arr1, arr2, indices_of, Array, Array2, ArrayView1, Axis};
-use ndarray::{array, s};
-use polars::chunked_array::ChunkedArray;
-use polars::prelude::{DataFrame, ChunkAnyValue, Float32Type, AnyValue};
-
-use std::any::Any;
 use std::convert::TryInto;
+
+use crate::Float;
 
 //https://rust-lang-nursery.github.io/rust-cookbook/science/mathematics/linear_algebra.html
 
@@ -97,6 +94,8 @@ pub fn accuracy(preds: &[f32], y: &[f32]) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    use ndarray::{array, Array};
+
     use super::*;
     #[test]
     fn test_acc() {
